@@ -754,7 +754,7 @@ def render_strategy_list(results, selected_idx):
             unsafe_allow_html=True,
         )
         if col.button(f"{label}  {counts[key]}",
-                      key=f"flt_{key}", use_container_width=True):
+                      key=f"flt_{key}", width='stretch'):
             st.session_state.strat_filter = key
             st.rerun()
         col.markdown("</div>", unsafe_allow_html=True)
@@ -865,7 +865,7 @@ def render_strategy_list(results, selected_idx):
         clicked = st.button(
             "Abierta" if is_sel else "Abrir",
             key=f"sel_{original_idx}",
-            use_container_width=True,
+            width='stretch',
         )
         st.markdown("</div>", unsafe_allow_html=True)
         st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
@@ -1018,7 +1018,7 @@ def render_detail(result):
             unsafe_allow_html=True,
         )
         if col.button(label if enabled else f"{label} (n/a)",
-                      key=f"mx_{key}", use_container_width=True):
+                      key=f"mx_{key}", width='stretch'):
             if enabled:
                 st.session_state.active_matrix = key
                 st.rerun()
@@ -1039,7 +1039,7 @@ def render_detail(result):
         mx, result["runs_range"], result["oos_range"],
         zone_info=zone_info, colorscale=cs, height=520,
     )
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    st.plotly_chart(fig, width='stretch', config={"displayModeBar": False})
 
     # ─── Zone footer ───
     mean_v = zone_info.get("mean", 0)
@@ -1147,7 +1147,7 @@ with run_col:
     st.markdown(eyebrow("Análisis"), unsafe_allow_html=True)
     st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
     st.markdown('<div class="primary-btn">', unsafe_allow_html=True)
-    run_btn = st.button("▶  Analizar", use_container_width=True)
+    run_btn = st.button("▶  Analizar", width='stretch')
     st.markdown("</div>", unsafe_allow_html=True)
 
 with cfg_col:
@@ -1267,7 +1267,7 @@ if st.session_state.results:
             data=summary_json.encode("utf-8"),
             file_name=f"wfm_resumen_{ts_label}.json",
             mime="application/json",
-            use_container_width=True,
+            width='stretch',
             key="dl_json_top",
         )
     with dl2:
@@ -1276,7 +1276,7 @@ if st.session_state.results:
             data=summary_text.encode("utf-8"),
             file_name=f"wfm_resumen_{ts_label}.txt",
             mime="text/plain",
-            use_container_width=True,
+            width='stretch',
             key="dl_txt_top",
         )
 
