@@ -524,7 +524,8 @@ def score_mini_bar(val, width=60):
 
 def build_summary_text(results):
     """
-    Render a plain-text summary:
+    Render a plain-text summary, ordered alphabetically by strategy name
+    (mismo orden que muestra StrategyQuant X para ir cruzando la lista):
       N. StrategyName    →  200 runs / 30% OOS    (if APPROVED)
       N. StrategyName    →  DECLINADA             (if DISCARDED)
       N. StrategyName    →  ERROR (reason)        (if ERROR)
@@ -532,26 +533,31 @@ def build_summary_text(results):
     if not results:
         return ""
 
-    names = [r.get("strategy_name", "Unknown") for r in results]
+    sorted_results = sorted(
+        results, key=lambda r: r.get("strategy_name", "").lower()
+    )
+
+    names = [r.get("strategy_name", "Unknown") for r in sorted_results]
     max_name_len = min(max(len(n) for n in names), 55)
 
-    n_total = len(results)
-    n_ok = sum(1 for r in results if r.get("status") == "APPROVED")
-    n_disc = sum(1 for r in results if r.get("status") == "DISCARDED")
-    n_err = sum(1 for r in results if r.get("status") == "ERROR")
+    n_total = len(sorted_results)
+    n_ok = sum(1 for r in sorted_results if r.get("status") == "APPROVED")
+    n_disc = sum(1 for r in sorted_results if r.get("status") == "DISCARDED")
+    n_err = sum(1 for r in sorted_results if r.get("status") == "ERROR")
 
     header = [
         "WFM Analyzer — Resumen de estrategias",
         f"Fecha: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
         f"Total: {n_total}  ·  Aprobadas: {n_ok}  ·  "
         f"Descartadas: {n_disc}  ·  Errores: {n_err}",
+        "Orden: alfabético (igual que StrategyQuant X)",
         "=" * (max_name_len + 38),
         "",
     ]
 
     width = len(str(n_total))
     lines = []
-    for i, r in enumerate(results, 1):
+    for i, r in enumerate(sorted_results, 1):
         name = (r.get("strategy_name", "Unknown")[:max_name_len]).ljust(max_name_len)
         status = r.get("status", "ERROR")
         if status == "APPROVED":
@@ -566,17 +572,24 @@ def build_summary_text(results):
 
 
 def build_summary_json(results):
-    """Structured JSON export: summary + per-strategy records."""
-    n_total = len(results)
-    n_ok = sum(1 for r in results if r.get("status") == "APPROVED")
-    n_disc = sum(1 for r in results if r.get("status") == "DISCARDED")
-    n_err = sum(1 for r in results if r.get("status") == "ERROR")
+    """Structured JSON export: summary + per-strategy records.
+
+    Listado ordenado alfabéticamente por nombre (mismo orden que StrategyQuant X).
+    """
+    sorted_results = sorted(
+        results, key=lambda r: r.get("strategy_name", "").lower()
+    )
+
+    n_total = len(sorted_results)
+    n_ok = sum(1 for r in sorted_results if r.get("status") == "APPROVED")
+    n_disc = sum(1 for r in sorted_results if r.get("status") == "DISCARDED")
+    n_err = sum(1 for r in sorted_results if r.get("status") == "ERROR")
 
     strategies = []
-    for i, r in enumerate(results, 1):
+    for i, r in enumerate(sorted_results, 1):
         status = r.get("status", "ERROR")
         record = {
-            "rank": i,
+            "index": i,
             "name": r.get("strategy_name", "Unknown"),
             "status": status,
         }
