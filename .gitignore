@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Streamlit
+.streamlit/secrets.toml
+streamlit*.log
+streamlit*.txt
+streamlit_run.log
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Claude Code local
+.claude/
+
+# Datos de ejemplo / pruebas locales
+ejemplo sqx/
+*.sqx
+
+# Temporales
+*.tmp
+*.bak
