@@ -1,0 +1,1745 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WFM Analyzer — StrategyQuant Walk Forward Matrix</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+:root {
+  --bg: #08080c;
+  --bg-deep: #050507;
+  --surface: #0f0f14;
+  --surface-h: #15151c;
+  --border: #1a1a24;
+  --border-s: #242432;
+  --border-g: rgba(255,255,255,0.06);
+  --text: #f3f3f5;
+  --text-dim: #a8a8b5;
+  --muted: #6e6e80;
+  --subtle: #3f3f52;
+  --accent: #7c6bff;
+  --accent-2: #4ea8ff;
+  --accent-d: #5b4dd9;
+  --green: #34d399;
+  --green-d: #10b981;
+  --red: #fb5a6f;
+  --red-d: #e02d4a;
+  --yellow: #fbbf24;
+  --gold: #f5c04a;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background:
+    radial-gradient(ellipse 1200px 600px at 15% -10%, rgba(124,107,255,0.10), transparent 60%),
+    radial-gradient(ellipse 900px 500px at 95% 0%, rgba(78,168,255,0.06), transparent 55%),
+    radial-gradient(ellipse 800px 400px at 50% 110%, rgba(124,107,255,0.05), transparent 60%),
+    linear-gradient(180deg, var(--bg) 0%, var(--bg-deep) 100%);
+  background-attachment: fixed;
+  color: var(--text);
+  min-height: 100vh;
+  position: relative;
+}
+body::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.035 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  opacity: 0.5; mix-blend-mode: overlay;
+}
+
+code, .mono { font-family: 'JetBrains Mono', monospace; font-feature-settings: 'zero', 'ss01'; }
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-s); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+.container {
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 1.2rem 2rem 4rem;
+  position: relative;
+  z-index: 1;
+}
+
+/* TOP BAR */
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-bottom: 18px; margin-bottom: 22px;
+  border-bottom: 1px solid var(--border);
+}
+.topbar-left { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.logo {
+  width: 36px; height: 36px;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 800; font-size: 1.05rem;
+  font-family: 'JetBrains Mono', monospace; flex-shrink: 0;
+  box-shadow: 0 4px 20px rgba(124,107,255,0.45),
+              inset 0 1px 0 rgba(255,255,255,0.25),
+              inset 0 -1px 0 rgba(0,0,0,0.2);
+  letter-spacing: -1px;
+}
+.app-name {
+  font-size: 1.08rem; font-weight: 700;
+  letter-spacing: -0.4px; line-height: 1.2;
+  background: linear-gradient(135deg, #ffffff 0%, #c4c4d4 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.app-tag { color: var(--muted); font-size: 0.7rem; margin-top: 2px; letter-spacing: 0.3px; }
+.topbar-right {
+  display: flex; align-items: center; gap: 10px;
+  color: var(--muted); font-size: 0.7rem;
+  font-family: 'JetBrains Mono', monospace; letter-spacing: 0.5px;
+}
+.live-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green); box-shadow: 0 0 8px var(--green);
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+/* EYEBROW */
+.eyebrow {
+  color: var(--muted); font-size: 0.66rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 1.4px;
+}
+
+/* CONTROLS ROW */
+.controls {
+  display: grid; grid-template-columns: 5fr 1.2fr 1.5fr; gap: 1rem; margin-bottom: 24px;
+}
+@media (max-width: 900px) { .controls { grid-template-columns: 1fr; } }
+
+/* UPLOAD */
+.upload-area {
+  border: 1px dashed rgba(255,255,255,0.12);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0.01));
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+  position: relative;
+}
+.upload-area:hover, .upload-area.drag {
+  border-color: rgba(124,107,255,0.5);
+  background: linear-gradient(180deg, rgba(124,107,255,0.04), rgba(78,168,255,0.02));
+  box-shadow: 0 4px 20px rgba(124,107,255,0.08);
+}
+.upload-area input { display: none; }
+.upload-text { color: var(--text-dim); font-size: 0.85rem; }
+.upload-text b { color: var(--accent); }
+.upload-hint { color: var(--muted); font-size: 0.72rem; margin-top: 4px; }
+.file-list {
+  margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px;
+  justify-content: center;
+}
+.file-chip {
+  background: rgba(124,107,255,0.10); border: 1px solid rgba(124,107,255,0.3);
+  color: #d8d0ff; font-size: 0.7rem; padding: 3px 9px; border-radius: 999px;
+  font-family: 'JetBrains Mono', monospace;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.file-chip .x { cursor: pointer; opacity: 0.6; }
+.file-chip .x:hover { opacity: 1; color: var(--red); }
+
+/* BUTTONS */
+.btn {
+  background: rgba(255,255,255,0.025);
+  color: var(--text);
+  border: 1px solid var(--border-g);
+  border-radius: 8px;
+  font-weight: 500;
+  font-size: 0.85rem;
+  padding: 0.55rem 1.1rem;
+  cursor: pointer;
+  font-family: inherit;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+  transition: all 0.18s cubic-bezier(.4,0,.2,1);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.btn:hover {
+  border-color: rgba(124,107,255,0.55);
+  background: rgba(124,107,255,0.08);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px rgba(124,107,255,0.15), inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.btn:focus { outline: none; box-shadow: 0 0 0 2px rgba(124,107,255,0.35); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.12);
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  box-shadow: 0 4px 18px rgba(124,107,255,0.35), inset 0 1px 0 rgba(255,255,255,0.18);
+  width: 100%;
+  height: 100%;
+}
+.btn-primary:hover {
+  background: linear-gradient(135deg, var(--accent-d) 0%, var(--accent) 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 26px rgba(124,107,255,0.5), inset 0 1px 0 rgba(255,255,255,0.22);
+  border-color: rgba(255,255,255,0.18);
+}
+
+/* THRESHOLDS */
+.thr-panel {
+  background: rgba(255,255,255,0.018);
+  border: 1px solid var(--border-g);
+  border-radius: 10px;
+  padding: 11px 14px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+.thr-panel.open { background: rgba(255,255,255,0.03); }
+.thr-content { padding-top: 12px; display: none; }
+.thr-panel.open .thr-content { display: block; }
+.thr-content label {
+  display: block; color: var(--text-dim); font-size: 0.78rem;
+  margin-bottom: 4px; margin-top: 8px;
+}
+.thr-content input[type="range"] { width: 100%; accent-color: var(--accent); }
+.thr-content .val { color: var(--accent); font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+
+/* PROGRESS */
+.progress {
+  height: 4px; background: rgba(255,255,255,0.06); border-radius: 999px;
+  overflow: hidden; margin: 12px 0;
+}
+.progress-bar {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  box-shadow: 0 0 12px rgba(124,107,255,0.5);
+  transition: width 0.2s ease;
+}
+.progress-text {
+  font-size: 0.78rem; color: var(--text-dim);
+  font-family: 'JetBrains Mono', monospace; text-align: center;
+  margin-top: 6px;
+}
+
+/* SUMMARY BAR */
+.summary-bar {
+  display: flex;
+  background: linear-gradient(135deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+  border: 1px solid var(--border-g);
+  border-radius: 14px; overflow: hidden; margin-bottom: 22px;
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 4px 30px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04);
+}
+.summary-stat {
+  flex: 1; min-width: 120px; padding: 18px 22px;
+  border-right: 1px solid var(--border);
+}
+.summary-stat:last-child { border-right: none; }
+.summary-stat .lbl {
+  color: var(--muted); font-size: 0.64rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 1.4px;
+}
+.summary-stat .val {
+  font-size: 1.9rem; font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  margin-top: 10px; line-height: 1; letter-spacing: -0.5px;
+}
+.glow-green { color: var(--green); text-shadow: 0 0 20px rgba(52,211,153,0.4), 0 0 4px rgba(52,211,153,0.2); }
+.color-red { color: var(--red); }
+.color-yellow { color: var(--yellow); }
+.color-text { color: var(--text); }
+.summary-stat.top-score {
+  background: linear-gradient(135deg, rgba(124,107,255,0.06), rgba(78,168,255,0.02));
+}
+.summary-stat.top-score .val {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 0 12px rgba(124,107,255,0.5));
+}
+
+/* EXPORT BAR */
+.export-bar {
+  background: linear-gradient(135deg, rgba(255,255,255,0.025), rgba(255,255,255,0.005));
+  border: 1px solid var(--border-g);
+  border-radius: 10px; padding: 14px 18px; margin-bottom: 16px;
+  backdrop-filter: blur(10px);
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+}
+.export-info { color: var(--text); font-size: 0.92rem; font-weight: 600; }
+.export-info .sub { color: var(--muted); font-size: 0.78rem; font-weight: 400; margin-top: 2px; }
+.export-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.export-btns .btn { font-size: 0.8rem; }
+
+/* EXPANDABLE LIST */
+details.summary-list {
+  background: rgba(255,255,255,0.015); border: 1px solid var(--border-g);
+  border-radius: 10px; margin-bottom: 18px;
+  backdrop-filter: blur(8px);
+}
+details.summary-list summary {
+  padding: 12px 16px; font-size: 0.82rem; color: var(--text-dim);
+  cursor: pointer; user-select: none; list-style: none;
+}
+details.summary-list summary::-webkit-details-marker { display: none; }
+details.summary-list summary::before {
+  content: "▶"; display: inline-block; margin-right: 8px;
+  transition: transform 0.15s; font-size: 0.65rem; color: var(--muted);
+}
+details.summary-list[open] summary::before { transform: rotate(90deg); }
+.summary-pre {
+  padding: 14px 16px;
+  background: rgba(0,0,0,0.25);
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-dim);
+  font-size: 0.75rem;
+  white-space: pre;
+  overflow-x: auto;
+  border-top: 1px solid var(--border);
+  margin: 0;
+}
+
+/* TWO COLUMN */
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 2.8fr;
+  gap: 1.5rem;
+}
+@media (max-width: 1100px) { .two-col { grid-template-columns: 1fr; } }
+
+/* STRATEGY LIST */
+.list-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 12px;
+}
+.search-input, .sort-select {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border-g);
+  color: var(--text);
+  border-radius: 8px;
+  font-size: 0.82rem;
+  padding: 0.5rem 0.8rem;
+  width: 100%;
+  font-family: inherit;
+  backdrop-filter: blur(6px);
+  transition: all 0.15s;
+}
+.search-input:focus, .sort-select:focus {
+  outline: none;
+  border-color: rgba(124,107,255,0.55);
+  box-shadow: 0 0 0 2px rgba(124,107,255,0.22);
+  background: rgba(124,107,255,0.04);
+}
+.search-input::placeholder { color: var(--muted); }
+
+.filter-pills {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
+  margin-top: 8px;
+}
+.fp {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border-g);
+  color: var(--muted);
+  border-radius: 999px;
+  font-size: 0.7rem; font-weight: 600; letter-spacing: 0.5px;
+  padding: 0.42rem 0.5rem;
+  cursor: pointer;
+  font-family: inherit;
+  backdrop-filter: blur(6px);
+  transition: all 0.15s;
+}
+.fp:hover { color: var(--text); border-color: rgba(255,255,255,0.15); background: rgba(255,255,255,0.05); }
+.fp.active {
+  background: linear-gradient(135deg, rgba(124,107,255,0.18), rgba(78,168,255,0.12));
+  border-color: rgba(124,107,255,0.5);
+  color: #e4deff;
+  box-shadow: 0 0 14px rgba(124,107,255,0.22), inset 0 1px 0 rgba(255,255,255,0.08);
+}
+
+.sort-row {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: center;
+  margin-top: 10px; margin-bottom: 14px;
+}
+.sort-row .lbl {
+  color: var(--muted); font-size: 0.68rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 1px;
+}
+
+.strat-scroll { max-height: 720px; overflow-y: auto; padding-right: 4px; }
+
+.strat-row {
+  background: rgba(255,255,255,0.015);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 11px 13px 11px 16px;
+  margin-bottom: 8px;
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(.4,0,.2,1);
+  position: relative;
+  overflow: hidden;
+}
+.strat-row:hover {
+  border-color: rgba(255,255,255,0.14);
+  transform: translateX(2px);
+  background: rgba(255,255,255,0.03);
+}
+.strat-row.selected {
+  background: linear-gradient(135deg, rgba(124,107,255,0.10), rgba(78,168,255,0.04));
+  border-color: transparent;
+  box-shadow: 0 0 0 1px rgba(124,107,255,0.55), 0 8px 28px rgba(124,107,255,0.18), inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.strat-row.selected::before {
+  content: ""; position: absolute; left: 0; top: 10%; bottom: 10%; width: 3px;
+  background: linear-gradient(180deg, var(--accent), var(--accent-2));
+  border-radius: 0 2px 2px 0;
+  box-shadow: 0 0 10px var(--accent);
+}
+.strat-line1 { display: flex; align-items: center; gap: 10px; }
+.strat-rank {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem; font-weight: 700; min-width: 26px;
+  letter-spacing: 0.3px;
+}
+.strat-dot {
+  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+}
+.strat-name {
+  font-size: 0.83rem; font-weight: 500; flex: 1;
+  letter-spacing: -0.1px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--text-dim);
+}
+.strat-row.selected .strat-name { color: var(--text); font-weight: 600; }
+.strat-score {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem; font-weight: 600; color: var(--text-dim);
+}
+.strat-row.selected .strat-score { color: var(--accent); }
+.strat-line2 {
+  margin-top: 7px; padding-left: 44px;
+  display: flex; align-items: center; gap: 10px;
+}
+.strat-best {
+  color: var(--muted); font-size: 0.72rem;
+  font-family: 'JetBrains Mono', monospace; flex: 1;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mini-bar {
+  width: 56px; height: 4px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 999px; overflow: hidden;
+}
+.mini-bar > div { height: 100%; border-radius: 999px; }
+
+.list-empty {
+  padding: 2rem 1rem; text-align: center; color: var(--muted);
+  font-size: 0.82rem; border: 1px dashed var(--border); border-radius: 8px;
+}
+
+/* DETAIL */
+.detail-empty {
+  padding: 3rem 2rem; text-align: center;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: var(--surface);
+}
+.detail-empty .ic { color: var(--yellow); font-size: 2rem; margin-bottom: 14px; }
+.detail-empty .h { color: var(--text); font-size: 1rem; font-weight: 600; }
+.detail-empty .m { color: var(--muted); font-size: 0.85rem; margin-top: 8px; }
+
+.detail-header {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 20px; flex-wrap: wrap; margin-bottom: 4px;
+}
+.detail-title {
+  margin: 8px 0 0; font-size: 1.65rem; font-weight: 700;
+  letter-spacing: -0.5px; line-height: 1.15;
+  background: linear-gradient(135deg, #ffffff 0%, #b4b4c4 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.detail-meta {
+  margin-top: 12px; display: flex; align-items: center;
+  gap: 14px; flex-wrap: wrap;
+}
+.status-pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 4px 10px; border-radius: 999px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border-g);
+}
+.status-dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+}
+.detail-meta .sep { color: var(--subtle); }
+.detail-meta .lbl { color: var(--muted); font-size: 0.82rem; }
+.detail-meta .val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.98rem; font-weight: 700; letter-spacing: -0.3px;
+}
+.detail-meta .val.opt {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+hr.divider {
+  border: none; height: 1px; margin: 1rem 0;
+  background: linear-gradient(90deg, transparent, var(--border) 20%, var(--border) 80%, transparent);
+}
+
+.metrics-row {
+  display: flex; gap: 32px; flex-wrap: wrap;
+  align-items: flex-start; padding: 6px 0;
+}
+.metric {
+  flex: 1; min-width: 140px;
+}
+.metric .lbl {
+  color: var(--muted); font-size: 0.66rem; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 1.2px;
+}
+.metric .val {
+  font-size: 1.5rem; font-weight: 600;
+  font-family: 'JetBrains Mono', monospace;
+  margin-top: 6px; line-height: 1;
+}
+.metric .sub {
+  color: var(--muted); font-size: 0.72rem; margin-top: 3px;
+}
+.delta {
+  display: inline-block;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem; font-weight: 500;
+  padding: 1px 6px; border-radius: 4px; margin-left: 4px;
+  vertical-align: middle;
+}
+.check { font-weight: 600; font-size: 0.82rem; }
+.check.pass { color: var(--green); }
+.check.fail { color: var(--red); }
+
+/* SEGMENTED CONTROL */
+.surface-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px;
+}
+.surface-hint { color: var(--muted); font-size: 0.72rem; }
+.seg-group { display: inline-flex; }
+.seg {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border-g);
+  color: var(--text-dim);
+  border-radius: 0;
+  font-size: 0.78rem; font-weight: 500;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.seg:hover { color: var(--text); background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.15); }
+.seg:first-child { border-radius: 8px 0 0 8px; }
+.seg:last-child { border-radius: 0 8px 8px 0; }
+.seg + .seg { border-left: none; }
+.seg.active {
+  color: #e4deff;
+  border-color: rgba(124,107,255,0.55);
+  background: linear-gradient(135deg, rgba(124,107,255,0.15), rgba(78,168,255,0.08));
+  box-shadow: 0 0 14px rgba(124,107,255,0.22), inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.seg.disabled { opacity: 0.4; pointer-events: none; }
+
+#heatmap { width: 100%; min-height: 520px; }
+
+.zone-footer {
+  color: var(--muted); font-size: 0.76rem; padding-top: 10px;
+  border-top: 1px solid var(--border); margin-top: 10px;
+  display: flex; gap: 24px; flex-wrap: wrap; align-items: center;
+}
+.zone-footer b { color: var(--text-dim); font-family: 'JetBrains Mono', monospace; }
+
+/* EMPTY STATE */
+.empty-state {
+  border: 1px dashed rgba(255,255,255,0.09);
+  border-radius: 16px;
+  padding: 5rem 2rem; text-align: center;
+  background:
+    radial-gradient(ellipse 400px 200px at 50% 0%, rgba(124,107,255,0.08), transparent 70%),
+    linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0.005));
+  backdrop-filter: blur(12px);
+  position: relative; overflow: hidden;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+}
+.empty-state::before {
+  content: ""; position: absolute; top: -50%; left: 50%; transform: translateX(-50%);
+  width: 400px; height: 400px;
+  background: radial-gradient(circle, rgba(124,107,255,0.12), transparent 60%);
+  filter: blur(40px); pointer-events: none;
+}
+.empty-state .icon {
+  font-size: 3rem; margin-bottom: 24px; line-height: 1;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 0 20px rgba(124,107,255,0.5));
+  font-family: 'JetBrains Mono', monospace;
+  position: relative; z-index: 1;
+}
+.empty-state .title {
+  color: var(--text); font-size: 1.15rem; font-weight: 700;
+  letter-spacing: -0.3px; position: relative; z-index: 1;
+}
+.empty-state .desc {
+  color: var(--text-dim); font-size: 0.88rem; margin-top: 10px;
+  max-width: 460px; margin-left: auto; margin-right: auto;
+  line-height: 1.6; position: relative; z-index: 1;
+}
+.empty-state .desc b { color: var(--text); }
+.empty-state .desc b.acc { color: var(--accent); }
+.empty-state .meta {
+  color: var(--muted); font-size: 0.74rem; margin-top: 22px;
+  letter-spacing: 0.3px; position: relative; z-index: 1;
+}
+
+/* BOTTOM BAR */
+.bottom-bar {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 999;
+  background: linear-gradient(180deg, rgba(8,8,12,0.6), rgba(5,5,7,0.92));
+  backdrop-filter: blur(18px);
+  border-top: 1px solid var(--border-g);
+  padding: 8px 22px; display: flex; align-items: center;
+  justify-content: space-between; gap: 12px; font-size: 0.7rem;
+  font-family: 'JetBrains Mono', monospace; color: var(--muted);
+  letter-spacing: 0.3px;
+}
+.bottom-bar b { color: var(--text-dim); }
+
+/* TOAST */
+.toast {
+  position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
+  background: linear-gradient(135deg, rgba(52,211,153,0.16), rgba(78,168,255,0.10));
+  border: 1px solid rgba(52,211,153,0.4);
+  color: var(--text);
+  padding: 10px 18px; border-radius: 10px; z-index: 1000;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 10px 40px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08);
+  font-size: 0.85rem;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto; }
+
+@media (max-width: 900px) {
+  .container { padding: 0.8rem 0.9rem 4rem; }
+  .summary-bar { overflow-x: auto; }
+  .summary-stat { min-width: 110px; }
+  .metrics-row { gap: 18px; }
+  .metric { min-width: 46%; }
+  .hide-sm { display: none !important; }
+}
+@media (max-width: 640px) {
+  .hide-xs { display: none !important; }
+  .detail-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .detail-meta { gap: 6px; font-size: 0.78rem; }
+  .metric { min-width: 100%; }
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="logo">W</div>
+    <div>
+      <div class="app-name">WFM Analyzer</div>
+      <div class="app-tag hide-xs">StrategyQuant · Walk Forward Matrix</div>
+    </div>
+  </div>
+  <div class="topbar-right hide-sm">
+    <span class="live-dot"></span>
+    <span>v3.0 · client-side</span>
+  </div>
+</div>
+
+<!-- CONTROLS -->
+<div class="controls">
+
+  <!-- UPLOAD -->
+  <div>
+    <div class="eyebrow">Archivos .sqx</div>
+    <div style="height:6px"></div>
+    <div class="upload-area" id="upload">
+      <input type="file" id="fileInput" multiple accept=".sqx">
+      <div class="upload-text">Arrastra archivos <b>.sqx</b> aquí o haz click</div>
+      <div class="upload-hint">Soporta carga masiva — todo se procesa en tu navegador, nada se sube</div>
+      <div class="file-list" id="fileList"></div>
+    </div>
+  </div>
+
+  <!-- ANALYZE BUTTON -->
+  <div>
+    <div class="eyebrow">Análisis</div>
+    <div style="height:6px"></div>
+    <button class="btn btn-primary" id="analyzeBtn">▶  Analizar</button>
+  </div>
+
+  <!-- THRESHOLDS -->
+  <div>
+    <div class="eyebrow">Umbrales</div>
+    <div style="height:6px"></div>
+    <div class="thr-panel" id="thrPanel">
+      <div id="thrToggle">⚙ Ajustar</div>
+      <div class="thr-content">
+        <label>Fitness OOS mínimo: <span class="val" id="thrFitVal">0.70</span></label>
+        <input type="range" id="thrFit" min="0.50" max="0.95" step="0.01" value="0.70">
+        <label>Param Stability mínimo: <span class="val" id="thrPsVal">0.75</span></label>
+        <input type="range" id="thrPs" min="0.60" max="0.95" step="0.01" value="0.75">
+        <label>Green cells mínimas: <span class="val" id="thrGreenVal">7</span></label>
+        <input type="range" id="thrGreen" min="5" max="9" step="1" value="7">
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- PROGRESS -->
+<div id="progressWrap" style="display:none;">
+  <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
+  <div class="progress-text" id="progressText">Procesando…</div>
+</div>
+
+<!-- RESULTS -->
+<div id="results"></div>
+
+<!-- EMPTY STATE -->
+<div id="emptyState" class="empty-state">
+  <div class="icon">◆</div>
+  <div class="title">Sin datos cargados</div>
+  <div class="desc">Sube uno o varios archivos <b>.sqx</b> y pulsa <b class="acc">Analizar</b> para comenzar.</div>
+  <div class="meta">Carga masiva · Zona estable detectada · Ranking automático · 100% en tu navegador</div>
+</div>
+
+</div>
+
+<!-- BOTTOM BAR -->
+<div class="bottom-bar">
+  <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap;">
+    <span id="sb-status"><span style="color:var(--muted);">●</span>&nbsp;sin datos</span>
+    <span class="hide-xs">·</span>
+    <span class="hide-xs">filtro <b id="sb-filter">all</b></span>
+    <span class="hide-sm">·</span>
+    <span class="hide-sm">orden <b id="sb-sort">score</b></span>
+    <span class="hide-sm">·</span>
+    <span class="hide-sm">superficie <b id="sb-mx">IS Ret/DD</b></span>
+  </div>
+  <div class="hide-xs" style="display:flex; gap:14px;">
+    <span>thr <b>fit <span id="sb-fit">0.70</span></b></span>
+    <span>·</span>
+    <span><b>ps <span id="sb-ps">0.75</span></b></span>
+    <span>·</span>
+    <span><b>min <span id="sb-mn">7</span></b></span>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+
+// ════════════════════════════════════════════════════════════
+//  CONSTANTS
+// ════════════════════════════════════════════════════════════
+
+const C = {
+  bg: '#08080c', surface: '#0f0f14', border: '#1a1a24', borderS: '#242432',
+  text: '#f3f3f5', textDim: '#a8a8b5', muted: '#6e6e80', subtle: '#3f3f52',
+  accent: '#7c6bff', accent2: '#4ea8ff',
+  green: '#34d399', red: '#fb5a6f', yellow: '#fbbf24', gold: '#f5c04a',
+};
+
+const COLORSCALES = {
+  retdd:   [[0.0,'#1a0b1a'],[0.2,'#3b0f1e'],[0.4,'#e0425f'],[0.6,'#f5c04a'],[0.8,'#34d399'],[1.0,'#10b981']],
+  fitness: [[0.0,'#1a0b1a'],[0.2,'#3b0f1e'],[0.35,'#e0425f'],[0.55,'#f5c04a'],[0.75,'#34d399'],[1.0,'#10b981']],
+  ps:      [[0.0,'#1a0b1a'],[0.3,'#3b0f1e'],[0.5,'#e0425f'],[0.7,'#f5c04a'],[0.85,'#34d399'],[1.0,'#10b981']],
+};
+
+const PLOTLY_DARK = {
+  paper_bgcolor: 'rgba(0,0,0,0)',
+  plot_bgcolor: 'rgba(0,0,0,0)',
+  font: { family: 'Inter', color: C.textDim, size: 11 },
+  margin: { l: 8, r: 8, t: 12, b: 8 },
+};
+
+// ════════════════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════════════════
+
+const state = {
+  files: [],          // File objects pending analysis
+  results: [],        // analyzed results (array of objects)
+  selectedIdx: 0,
+  thresholds: { fitness: 0.70, ps: 0.75, minGreen: 7 },
+  activeMatrix: 'retdd',
+  filter: 'all',
+  sort: 'score',
+  search: '',
+};
+
+// ════════════════════════════════════════════════════════════
+//  PARSER  (JS port of parser.py)
+// ════════════════════════════════════════════════════════════
+
+function decodeRetddBlob(b64) {
+  let raw;
+  try {
+    const padded = b64 + '==';
+    raw = atob(padded);
+  } catch (e) { return null; }
+  const len = raw.length;
+  const buf = new ArrayBuffer(len);
+  const bytes = new Uint8Array(buf);
+  for (let i = 0; i < len; i++) bytes[i] = raw.charCodeAt(i);
+  const view = new DataView(buf);
+  let val = null;
+  for (let i = 0; i < len - 5; i++) {
+    if (bytes[i] === 0x03 && bytes[i + 1] === 25) {
+      val = view.getFloat32(i + 2, false); // big-endian
+    }
+  }
+  return val;
+}
+
+async function parseSqx(file) {
+  const result = {
+    strategy_name: '',
+    file_name: file.name,
+    fitness_matrix: {},   // "runs|oos" -> float
+    param_stability: {},
+    retdd_matrix: {},
+    runs_range: [],
+    oos_range: [],
+    error: null,
+  };
+
+  let xmlText;
+  try {
+    const zip = await JSZip.loadAsync(file);
+    const settings = zip.file('settings.xml');
+    if (!settings) {
+      result.error = 'settings.xml not found inside .sqx';
+      return result;
+    }
+    xmlText = await settings.async('string');
+  } catch (e) {
+    result.error = `File is not a valid .sqx (${e.message || 'ZIP error'})`;
+    return result;
+  }
+
+  // Strategy name
+  const nameMatch = xmlText.match(/<ResultsGroup ResultName="([^"]+)"/);
+  result.strategy_name = nameMatch ? nameMatch[1] : file.name.replace(/\.sqx$/i, '');
+
+  // Matrix axes
+  const mr = xmlText.match(/<MatrixResult start1="(\d+)" stop1="(\d+)" increment1="(\d+)" start2="(\d+)" stop2="(\d+)" increment2="(\d+)"/);
+  if (!mr) {
+    result.error = 'WFM MatrixResult not found — file may not contain WF data';
+    return result;
+  }
+  const [oosStart, oosStop, oosInc, runsStart, runsStop, runsInc] =
+    [+mr[1], +mr[2], +mr[3], +mr[4], +mr[5], +mr[6]];
+  for (let v = oosStart; v <= oosStop; v += oosInc) result.oos_range.push(v);
+  for (let v = runsStart; v <= runsStop; v += runsInc) result.runs_range.push(v);
+
+  // Per-run-config blocks: WF: NN runs : MM % OOS
+  // Use [\s\S]*? to emulate Python's DOTALL
+  const blockRe = /<Result resultKey="WF: (\d+) runs : (\d+) % OOS"[\s\S]*?<\/Result>/g;
+  let m;
+  while ((m = blockRe.exec(xmlText)) !== null) {
+    const runs = +m[1];
+    const oos = +m[2];
+    const block = m[0];
+    const key = `${runs}|${oos}`;
+
+    const fitM = block.match(/<Fitnesses[^/]*\bOOS="([^"]+)"/);
+    if (fitM) result.fitness_matrix[key] = parseFloat(fitM[1]);
+
+    const blobM = block.match(/stats_[^<]*direction_DD_1[^<]*sample_DD_127[^<]*type="com\.strategyquant\.tradinglib\.SQStats"><SQStats[^>]+e="b64">([^<]+)</);
+    if (blobM) {
+      const val = decodeRetddBlob(blobM[1]);
+      if (val !== null && val > 0) result.retdd_matrix[key] = val;
+    }
+  }
+
+  // ParametersStability
+  const psRe = /<ParametersStability_WF_(\d+)_runs_(\d+)_OOS[^>]* type="Double">([\d.]+)</g;
+  let pm;
+  while ((pm = psRe.exec(xmlText)) !== null) {
+    result.param_stability[`${+pm[1]}|${+pm[2]}`] = parseFloat(pm[3]);
+  }
+
+  if (Object.keys(result.fitness_matrix).length === 0) {
+    result.error = 'No fitness data found — check if WF Matrix was computed';
+  }
+
+  return result;
+}
+
+// ════════════════════════════════════════════════════════════
+//  ANALYZER  (JS port of analyzer.py)
+// ════════════════════════════════════════════════════════════
+
+function buildMatrix(dict, runsRange, oosRange) {
+  const nR = runsRange.length, nO = oosRange.length;
+  const m = Array.from({ length: nR }, () => new Float64Array(nO));
+  for (let i = 0; i < nR; i++) {
+    for (let j = 0; j < nO; j++) {
+      const k = `${runsRange[i]}|${oosRange[j]}`;
+      m[i][j] = dict[k] || 0;
+    }
+  }
+  return m;
+}
+
+function matrixHasPositive(m) {
+  for (const row of m) for (const v of row) if (v > 0) return true;
+  return false;
+}
+
+function windowPairwiseDev(m, i0, j0) {
+  let total = 0;
+  for (let i = 0; i < 3; i++) {
+    for (let j = 0; j < 2; j++) total += Math.abs(m[i0+i][j0+j] - m[i0+i][j0+j+1]);
+  }
+  for (let i = 0; i < 2; i++) {
+    for (let j = 0; j < 3; j++) total += Math.abs(m[i0+i][j0+j] - m[i0+i+1][j0+j]);
+  }
+  return total;
+}
+
+function cardinalMaxDev(m, ci, cj) {
+  const center = m[ci][cj];
+  const nR = m.length, nC = m[0].length;
+  const devs = [];
+  if (ci > 0)      devs.push(Math.abs(center - m[ci-1][cj]));
+  if (ci < nR-1)   devs.push(Math.abs(center - m[ci+1][cj]));
+  if (cj > 0)      devs.push(Math.abs(center - m[ci][cj-1]));
+  if (cj < nC-1)   devs.push(Math.abs(center - m[ci][cj+1]));
+  return devs.length ? Math.max(...devs) : 0;
+}
+
+function patchStats(m, i0, j0, w) {
+  let sum = 0, sumSq = 0, n = w * w;
+  for (let i = 0; i < w; i++) {
+    for (let j = 0; j < w; j++) {
+      const v = m[i0+i][j0+j];
+      sum += v;
+      sumSq += v * v;
+    }
+  }
+  const mean = sum / n;
+  const variance = sumSq / n - mean * mean;
+  return { mean, std: Math.sqrt(Math.max(0, variance)) };
+}
+
+function findStableZone(matrix, runsRange, oosRange, window = 3, cardinalThreshold = 1.5) {
+  const nR = matrix.length, nO = matrix[0].length;
+  const candidates = [];
+  for (let i = 0; i <= nR - window; i++) {
+    for (let j = 0; j <= nO - window; j++) {
+      const ci = i + Math.floor(window / 2);
+      const cj = j + Math.floor(window / 2);
+      const pwDev = windowPairwiseDev(matrix, i, j);
+      const cardDev = cardinalMaxDev(matrix, ci, cj);
+      const { mean, std } = patchStats(matrix, i, j, window);
+      candidates.push({
+        i_start: i, i_end: i + window,
+        j_start: j, j_end: j + window,
+        center_i: ci, center_j: cj,
+        pw_dev: pwDev, card_dev: cardDev,
+        mean, std,
+        score: -pwDev,
+      });
+    }
+  }
+  if (candidates.length === 0) return [null, null, 0];
+  const filtered = candidates.filter(c => c.card_dev < cardinalThreshold);
+  const pool = filtered.length ? filtered : candidates;
+  const best = pool.reduce((a, b) => b.pw_dev < a.pw_dev ? b : a);
+  return [[runsRange[best.center_i], oosRange[best.center_j]], best, best.score];
+}
+
+function checkWfm(psMatrix, ci, cj, psThreshold, minGreen, window = 3) {
+  const nR = psMatrix.length, nO = psMatrix[0].length;
+  const half = Math.floor(window / 2);
+  const i0 = Math.max(0, ci - half);
+  const i1 = Math.min(nR, ci + half + 1);
+  const j0 = Math.max(0, cj - half);
+  const j1 = Math.min(nO, cj + half + 1);
+  let green = 0, total = 0;
+  for (let i = i0; i < i1; i++) {
+    for (let j = j0; j < j1; j++) {
+      total++;
+      if (psMatrix[i][j] >= psThreshold) green++;
+    }
+  }
+  const pct = total > 0 ? green / total : 0;
+  return {
+    pass: green >= minGreen,
+    green, total,
+    pct: Math.round(pct * 1000) / 10,
+  };
+}
+
+function analyzeStrategy(sqx, thr) {
+  if (sqx.error) {
+    return {
+      strategy_name: sqx.strategy_name || sqx.file_name || 'Unknown',
+      status: 'ERROR',
+      error: sqx.error,
+    };
+  }
+  const runs = sqx.runs_range, oos = sqx.oos_range;
+  if (!runs.length || !oos.length) {
+    return { strategy_name: sqx.strategy_name, status: 'ERROR', error: 'Matrix axes not found' };
+  }
+  const fitnessMatrix = buildMatrix(sqx.fitness_matrix, runs, oos);
+  const psMatrix = buildMatrix(sqx.param_stability, runs, oos);
+  const retddMatrix = buildMatrix(sqx.retdd_matrix, runs, oos);
+
+  let zoneMatrix, zoneName;
+  if (matrixHasPositive(retddMatrix)) {
+    zoneMatrix = retddMatrix; zoneName = 'retdd';
+  } else {
+    zoneMatrix = psMatrix; zoneName = 'ps';
+  }
+
+  const [bestRun, zoneInfo, zoneScore] = findStableZone(zoneMatrix, runs, oos);
+  if (!bestRun) {
+    return { strategy_name: sqx.strategy_name, status: 'ERROR', error: 'Could not determine stable zone' };
+  }
+  const [bestRuns, bestOos] = bestRun;
+  const ci = zoneInfo.center_i, cj = zoneInfo.center_j;
+
+  const wfm = checkWfm(psMatrix, ci, cj, thr.ps, thr.minGreen);
+  const psValue = psMatrix[ci][cj];
+  const psPass = psValue >= thr.ps;
+  const fitnessAtBest = fitnessMatrix[ci][cj];
+
+  const score = 0.40 * fitnessAtBest + 0.40 * psValue + 0.20 * (wfm.green / wfm.total);
+  const status = (wfm.pass && psPass) ? 'APPROVED' : 'DISCARDED';
+
+  return {
+    strategy_name: sqx.strategy_name,
+    status,
+    best_runs: bestRuns,
+    best_oos_pct: bestOos,
+    score: round(score, 4),
+    fitness_score: round(fitnessAtBest, 4),
+    ps_value: round(psValue, 4),
+    ps_pass: psPass,
+    wfm_pass: wfm.pass,
+    green_count: wfm.green,
+    total_cells: wfm.total,
+    green_pct: wfm.pct,
+    zone_mean: round(zoneInfo.mean, 4),
+    zone_std: round(zoneInfo.std, 4),
+    zone_score: round(zoneScore, 4),
+    zone_matrix_name: zoneName,
+    fitness_matrix: fitnessMatrix,
+    ps_matrix: psMatrix,
+    retdd_matrix: retddMatrix,
+    runs_range: runs,
+    oos_range: oos,
+    zone_info: zoneInfo,
+  };
+}
+
+function rankStrategies(results) {
+  const approved = results.filter(r => r.status === 'APPROVED').sort((a, b) => b.score - a.score);
+  const discarded = results.filter(r => r.status === 'DISCARDED').sort((a, b) => b.score - a.score);
+  const errors = results.filter(r => r.status === 'ERROR');
+  return [...approved, ...discarded, ...errors];
+}
+
+function round(v, d) {
+  const p = Math.pow(10, d);
+  return Math.round(v * p) / p;
+}
+
+// ════════════════════════════════════════════════════════════
+//  EXPORT BUILDERS  (alphabetical by name — matches StrategyQuant X order)
+// ════════════════════════════════════════════════════════════
+
+function buildSummaryText(results) {
+  if (!results.length) return '';
+  const sorted = [...results].sort((a, b) =>
+    (a.strategy_name || '').toLowerCase().localeCompare((b.strategy_name || '').toLowerCase())
+  );
+  const names = sorted.map(r => r.strategy_name || 'Unknown');
+  const maxNameLen = Math.min(Math.max(...names.map(n => n.length)), 55);
+  const nT = sorted.length;
+  const nOk = sorted.filter(r => r.status === 'APPROVED').length;
+  const nDi = sorted.filter(r => r.status === 'DISCARDED').length;
+  const nEr = sorted.filter(r => r.status === 'ERROR').length;
+  const now = new Date();
+  const ts = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  const header = [
+    'WFM Analyzer — Resumen de estrategias',
+    `Fecha: ${ts}`,
+    `Total: ${nT}  ·  Aprobadas: ${nOk}  ·  Descartadas: ${nDi}  ·  Errores: ${nEr}`,
+    'Orden: alfabético (igual que StrategyQuant X)',
+    '='.repeat(maxNameLen + 38),
+    '',
+  ];
+  const width = String(nT).length;
+  const lines = sorted.map((r, i) => {
+    const name = (r.strategy_name || 'Unknown').slice(0, maxNameLen).padEnd(maxNameLen);
+    let verdict;
+    if (r.status === 'APPROVED') verdict = `${r.best_runs} runs / ${r.best_oos_pct}% OOS`;
+    else if (r.status === 'DISCARDED') verdict = 'DECLINADA — no sirve';
+    else verdict = `ERROR — ${r.error || 'archivo inválido'}`;
+    return `${String(i + 1).padStart(width)}. ${name}  →  ${verdict}`;
+  });
+  return header.concat(lines).join('\n');
+}
+
+function buildSummaryJson(results) {
+  const sorted = [...results].sort((a, b) =>
+    (a.strategy_name || '').toLowerCase().localeCompare((b.strategy_name || '').toLowerCase())
+  );
+  const strategies = sorted.map((r, i) => {
+    const rec = { index: i + 1, name: r.strategy_name || 'Unknown', status: r.status };
+    if (r.status === 'APPROVED') {
+      rec.optimization = {
+        runs: r.best_runs, oos_pct: r.best_oos_pct,
+        label: `${r.best_runs} runs / ${r.best_oos_pct}% OOS`,
+      };
+      rec.metrics = {
+        score: r.score, fitness_oos: r.fitness_score, param_stability: r.ps_value,
+        green_cells: r.green_count, total_cells: r.total_cells, green_pct: r.green_pct,
+        zone_mean: r.zone_mean, zone_std: r.zone_std,
+      };
+    } else if (r.status === 'DISCARDED') {
+      rec.verdict = 'DECLINADA — no sirve';
+      rec.metrics = {
+        score: r.score, fitness_oos: r.fitness_score, param_stability: r.ps_value,
+        green_cells: r.green_count, total_cells: r.total_cells,
+      };
+    } else {
+      rec.error = r.error || 'archivo inválido';
+    }
+    return rec;
+  });
+  return JSON.stringify({
+    analyzed_at: new Date().toISOString().split('.')[0],
+    thresholds: state.thresholds,
+    summary: {
+      total: sorted.length,
+      approved: sorted.filter(r => r.status === 'APPROVED').length,
+      discarded: sorted.filter(r => r.status === 'DISCARDED').length,
+      errors: sorted.filter(r => r.status === 'ERROR').length,
+    },
+    strategies,
+  }, null, 2);
+}
+
+function downloadFile(content, filename, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+// ════════════════════════════════════════════════════════════
+//  RENDER
+// ════════════════════════════════════════════════════════════
+
+const $ = sel => document.querySelector(sel);
+const $$ = sel => document.querySelectorAll(sel);
+
+function statusColor(status) {
+  return status === 'APPROVED' ? C.green : status === 'DISCARDED' ? C.red : C.yellow;
+}
+function statusLabel(status) {
+  return status === 'APPROVED' ? 'Approved' : status === 'DISCARDED' ? 'Discarded' : 'Error';
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function deltaBadge(value, threshold, asPct = false) {
+  const diff = value - threshold;
+  const sign = diff >= 0 ? '+' : '−';
+  const color = diff >= 0 ? C.green : C.red;
+  const bg = diff >= 0 ? 'rgba(63,185,80,0.10)' : 'rgba(248,81,73,0.10)';
+  const mag = asPct ? Math.abs(diff * 100) : Math.abs(diff);
+  const fmt = asPct ? `${mag.toFixed(1)}pp` : mag.toFixed(3);
+  return `<span class="delta" style="color:${color};background:${bg};">${sign}${fmt}</span>`;
+}
+
+function deltaCount(green, minGreen) {
+  const diff = green - minGreen;
+  const sign = diff >= 0 ? '+' : '−';
+  const color = diff >= 0 ? C.green : C.red;
+  const bg = diff >= 0 ? 'rgba(63,185,80,0.10)' : 'rgba(248,81,73,0.10)';
+  return `<span class="delta" style="color:${color};background:${bg};">${sign}${Math.abs(diff)}</span>`;
+}
+
+function checkMark(ok) {
+  return ok
+    ? `<span class="check pass">✓ Pass</span>`
+    : `<span class="check fail">✗ Fail</span>`;
+}
+
+function miniBar(val) {
+  const pct = Math.max(0, Math.min(1, val)) * 100;
+  let grad, glow;
+  if (pct >= 70) { grad = `linear-gradient(90deg, ${C.green}, ${C.green})`; glow = C.green; }
+  else if (pct >= 50) { grad = `linear-gradient(90deg, ${C.yellow}, ${C.gold})`; glow = C.yellow; }
+  else { grad = `linear-gradient(90deg, ${C.red}, ${C.red})`; glow = C.red; }
+  return `<div class="mini-bar"><div style="width:${pct.toFixed(0)}%; background:${grad}; box-shadow:0 0 8px ${glow}aa;"></div></div>`;
+}
+
+function renderFileChips() {
+  const list = $('#fileList');
+  list.innerHTML = state.files.map((f, i) =>
+    `<span class="file-chip">${escapeHtml(f.name)} <span class="x" data-i="${i}">×</span></span>`
+  ).join('');
+  list.querySelectorAll('.x').forEach(el => {
+    el.onclick = (e) => {
+      e.stopPropagation();
+      const i = +el.dataset.i;
+      state.files.splice(i, 1);
+      renderFileChips();
+    };
+  });
+}
+
+function renderEmpty() {
+  $('#emptyState').style.display = state.results.length ? 'none' : '';
+  $('#results').innerHTML = '';
+}
+
+function applyFilters(items) {
+  let arr = items.map((r, i) => ({ idx: i, r }));
+  if (state.filter !== 'all') {
+    const wanted = { approved: 'APPROVED', discarded: 'DISCARDED', error: 'ERROR' }[state.filter];
+    arr = arr.filter(t => t.r.status === wanted);
+  }
+  if (state.search) {
+    const q = state.search.toLowerCase().trim();
+    arr = arr.filter(t => (t.r.strategy_name || '').toLowerCase().includes(q));
+  }
+  if (state.sort === 'name') {
+    arr.sort((a, b) => (a.r.strategy_name || '').toLowerCase().localeCompare((b.r.strategy_name || '').toLowerCase()));
+  }
+  return arr;
+}
+
+function renderStrategyList() {
+  const results = state.results;
+  const counts = {
+    all: results.length,
+    approved: results.filter(r => r.status === 'APPROVED').length,
+    discarded: results.filter(r => r.status === 'DISCARDED').length,
+    error: results.filter(r => r.status === 'ERROR').length,
+  };
+
+  const items = applyFilters(results);
+
+  const filterBtns = [
+    ['all','Todas'], ['approved','OK'], ['discarded','NO'], ['error','ERR']
+  ].map(([k, lbl]) =>
+    `<button class="fp ${state.filter === k ? 'active' : ''}" data-flt="${k}">${lbl}  ${counts[k]}</button>`
+  ).join('');
+
+  let rowsHtml;
+  if (!items.length) {
+    rowsHtml = `<div class="list-empty">Sin resultados para este filtro.</div>`;
+  } else {
+    rowsHtml = items.map(({ idx, r }) => {
+      const isSel = idx === state.selectedIdx;
+      const dotColor = statusColor(r.status);
+      let rankColor = C.muted;
+      if (r.status === 'APPROVED' && idx < 3) rankColor = ['#fbbf24','#c0c0c0','#cd7f32'][idx];
+      else if (r.status === 'APPROVED') rankColor = C.textDim;
+      const best = r.best_runs !== undefined ? `${r.best_runs}r · ${r.best_oos_pct}% OOS` : '—';
+      const score = r.score || 0;
+      return `
+        <div class="strat-row ${isSel ? 'selected' : ''}" data-idx="${idx}">
+          <div class="strat-line1">
+            <span class="strat-rank" style="color:${rankColor};">#${String(idx + 1).padStart(2,'0')}</span>
+            <span class="strat-dot" style="background:${dotColor}; box-shadow:0 0 10px ${dotColor}aa, 0 0 2px ${dotColor};"></span>
+            <span class="strat-name" title="${escapeHtml(r.strategy_name || '')}">${escapeHtml(r.strategy_name || 'Unknown')}</span>
+            <span class="strat-score">${score.toFixed(3)}</span>
+          </div>
+          <div class="strat-line2">
+            <span class="strat-best">${best}</span>
+            ${miniBar(score)}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  return `
+    <div class="list-header">
+      <div class="eyebrow">Estrategias · ${results.length}</div>
+    </div>
+    <input type="text" class="search-input" id="searchInput" placeholder="Buscar estrategia..." value="${escapeHtml(state.search)}">
+    <div class="filter-pills">${filterBtns}</div>
+    <div class="sort-row">
+      <span class="lbl">Ordenar por</span>
+      <select class="sort-select" id="sortSelect">
+        <option value="score" ${state.sort === 'score' ? 'selected' : ''}>Score</option>
+        <option value="name" ${state.sort === 'name' ? 'selected' : ''}>Nombre</option>
+      </select>
+    </div>
+    <div class="strat-scroll">${rowsHtml}</div>
+  `;
+}
+
+function renderDetail(r) {
+  if (!r) return '';
+  if (r.status === 'ERROR') {
+    return `
+      <div class="detail-empty">
+        <div class="ic">⚠</div>
+        <div class="h">Error al procesar</div>
+        <div class="m">${escapeHtml(r.error || 'Error desconocido')}</div>
+      </div>
+    `;
+  }
+  const thr = state.thresholds;
+  const fitColor = r.fitness_score >= thr.fitness ? C.green : (r.fitness_score >= thr.fitness - 0.15 ? C.yellow : C.red);
+  const psColor = r.ps_pass ? C.green : C.red;
+  const greenColor = r.wfm_pass ? C.green : C.red;
+  const pw = r.zone_info.pw_dev || 0;
+  const card = r.zone_info.card_dev || 0;
+  const dotColor = statusColor(r.status);
+  const zoneBasis = r.zone_matrix_name === 'retdd' ? 'IS Ret/DD' : 'Param Stability';
+
+  return `
+    <div class="detail-header">
+      <div style="flex:1; min-width:250px;">
+        <div class="eyebrow">Estrategia</div>
+        <h2 class="detail-title">${escapeHtml(r.strategy_name)}</h2>
+        <div class="detail-meta">
+          <span class="status-pill">
+            <span class="status-dot" style="background:${dotColor}; box-shadow:0 0 8px ${dotColor}88;"></span>
+            <span style="color:${dotColor}; font-weight:600; font-size:0.82rem;">${statusLabel(r.status)}</span>
+          </span>
+          <span class="sep">·</span>
+          <span class="lbl">Score</span>
+          <span class="val color-text">${r.score.toFixed(3)}</span>
+          <span class="sep">·</span>
+          <span class="lbl">Optimización</span>
+          <span class="val opt">${r.best_runs} runs / ${r.best_oos_pct}% OOS</span>
+        </div>
+      </div>
+    </div>
+    <hr class="divider">
+
+    <div class="metrics-row">
+      <div class="metric">
+        <div class="lbl">Fitness OOS</div>
+        <div class="val" style="color:${fitColor};">${r.fitness_score.toFixed(3)}${deltaBadge(r.fitness_score, thr.fitness)}</div>
+        <div class="sub">threshold ${thr.fitness.toFixed(2)} · ${checkMark(r.fitness_score >= thr.fitness)}</div>
+      </div>
+      <div class="metric">
+        <div class="lbl">Param Stability</div>
+        <div class="val" style="color:${psColor};">${r.ps_value.toFixed(3)}${deltaBadge(r.ps_value, thr.ps)}</div>
+        <div class="sub">threshold ${thr.ps.toFixed(2)} · ${checkMark(r.ps_pass)}</div>
+      </div>
+      <div class="metric">
+        <div class="lbl">Green Cells</div>
+        <div class="val" style="color:${greenColor};">${r.green_count}/${r.total_cells}${deltaCount(r.green_count, thr.minGreen)}</div>
+        <div class="sub">${r.green_pct.toFixed(0)}% verdes · min ${thr.minGreen} · ${checkMark(r.wfm_pass)}</div>
+      </div>
+      <div class="metric">
+        <div class="lbl">Zone Flatness</div>
+        <div class="val color-text">${pw.toFixed(2)}</div>
+        <div class="sub">max card. dev ${card.toFixed(2)}</div>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <div class="surface-bar">
+      <div class="eyebrow">Superficie</div>
+      <span class="surface-hint">★ óptimo · recuadro azul = zona estable 3×3</span>
+    </div>
+    <div class="seg-group" id="segGroup">
+      <button class="seg ${state.activeMatrix === 'retdd' ? 'active' : ''} ${matrixHasPositive(r.retdd_matrix) ? '' : 'disabled'}" data-mx="retdd">IS Ret/DD</button>
+      <button class="seg ${state.activeMatrix === 'fitness' ? 'active' : ''}" data-mx="fitness">Fitness OOS</button>
+      <button class="seg ${state.activeMatrix === 'ps' ? 'active' : ''}" data-mx="ps">Param Stability</button>
+    </div>
+
+    <div id="heatmap"></div>
+
+    <div class="zone-footer">
+      <span>Zona detectada sobre <b>${zoneBasis}</b></span>
+      <span>·</span>
+      <span>pairwise dev <b>${pw.toFixed(3)}</b></span>
+      <span>·</span>
+      <span>max cardinal dev <b>${card.toFixed(3)}</b></span>
+      <span>·</span>
+      <span>mean <b>${(r.zone_info.mean || 0).toFixed(3)}</b></span>
+      <span>·</span>
+      <span>std <b>${(r.zone_info.std || 0).toFixed(3)}</b></span>
+    </div>
+  `;
+}
+
+function renderHeatmap(r) {
+  if (!r || r.status === 'ERROR') return;
+  const matrices = {
+    retdd: { m: r.retdd_matrix, cs: COLORSCALES.retdd },
+    fitness: { m: r.fitness_matrix, cs: COLORSCALES.fitness },
+    ps: { m: r.ps_matrix, cs: COLORSCALES.ps },
+  };
+  let { m, cs } = matrices[state.activeMatrix];
+  if (!m || !matrixHasPositive(m)) {
+    m = r.fitness_matrix; cs = COLORSCALES.fitness;
+  }
+  const zone = r.zone_info;
+  const xLabels = r.oos_range.map(o => `${o}%`);
+  const yLabels = r.runs_range.map(v => String(v));
+  const text = m.map(row => row.map(v => v.toFixed(2)));
+
+  const data = [{
+    z: m,
+    x: xLabels,
+    y: yLabels,
+    type: 'heatmap',
+    colorscale: cs,
+    showscale: true,
+    text,
+    texttemplate: '%{text}',
+    textfont: { size: 11, family: 'JetBrains Mono', color: '#0a0a0a' },
+    hovertemplate: 'Runs: %{y}<br>OOS: %{x}<br>Valor: %{z:.4f}<extra></extra>',
+    xgap: 2, ygap: 2,
+    colorbar: {
+      thickness: 8, len: 0.85,
+      tickfont: { color: C.muted, size: 10 },
+      outlinewidth: 0,
+      bgcolor: 'rgba(0,0,0,0)',
+    },
+  }];
+
+  const shapes = [];
+  const annotations = [];
+  if (zone) {
+    const ci = zone.center_i, cj = zone.center_j;
+    const i0 = zone.i_start, i1 = zone.i_end - 1;
+    const j0 = zone.j_start, j1 = zone.j_end - 1;
+    shapes.push({
+      type: 'rect',
+      x0: j0 - 0.5, x1: j1 + 0.5, y0: i0 - 0.5, y1: i1 + 0.5,
+      line: { color: C.accent, width: 2.5 },
+      layer: 'above',
+    });
+    shapes.push({
+      type: 'rect',
+      x0: cj - 0.5, x1: cj + 0.5, y0: ci - 0.5, y1: ci + 0.5,
+      line: { color: '#fbbf24', width: 3 },
+      layer: 'above',
+    });
+    annotations.push({
+      x: xLabels[cj], y: yLabels[ci],
+      text: '★', showarrow: false,
+      font: { size: 20, color: '#fbbf24' },
+    });
+  }
+
+  const layout = {
+    ...PLOTLY_DARK,
+    xaxis: {
+      title: { text: 'OOS %', font: { color: C.muted, size: 11 } },
+      tickfont: { color: C.textDim, size: 11 },
+      showgrid: false, zeroline: false,
+    },
+    yaxis: {
+      title: { text: 'Runs', font: { color: C.muted, size: 11 } },
+      tickfont: { color: C.textDim, size: 11 },
+      showgrid: false, zeroline: false,
+    },
+    height: 520,
+    shapes, annotations,
+  };
+
+  Plotly.newPlot('heatmap', data, layout, { displayModeBar: false, responsive: true });
+}
+
+function renderResults() {
+  const results = state.results;
+  if (!results.length) {
+    renderEmpty();
+    return;
+  }
+  $('#emptyState').style.display = 'none';
+
+  const nT = results.length;
+  const nOk = results.filter(r => r.status === 'APPROVED').length;
+  const nDi = results.filter(r => r.status === 'DISCARDED').length;
+  const nEr = results.filter(r => r.status === 'ERROR').length;
+  const topScore = results.reduce((m, r) => Math.max(m, r.score || 0), 0);
+
+  $('#results').innerHTML = `
+    <div class="summary-bar">
+      <div class="summary-stat"><div class="lbl">Total</div><div class="val color-text">${nT}</div></div>
+      <div class="summary-stat"><div class="lbl">Aprobadas</div><div class="val glow-green">${nOk}</div></div>
+      <div class="summary-stat"><div class="lbl">Descartadas</div><div class="val color-red">${nDi}</div></div>
+      <div class="summary-stat"><div class="lbl">Errores</div><div class="val color-yellow">${nEr}</div></div>
+      <div class="summary-stat top-score"><div class="lbl">Top Score</div><div class="val">${topScore.toFixed(3)}</div></div>
+    </div>
+
+    <div class="export-bar">
+      <div class="export-info">
+        <div class="eyebrow">Resumen exportable</div>
+        <div style="margin-top:4px;">Lista completa · ${nT} estrategia${nT !== 1 ? 's' : ''}<div class="sub">Orden alfabético — igual que StrategyQuant X</div></div>
+      </div>
+      <div class="export-btns">
+        <button class="btn" id="dlJson">⬇ Descargar JSON</button>
+        <button class="btn" id="dlTxt">⬇ Descargar .txt</button>
+      </div>
+    </div>
+
+    <details class="summary-list">
+      <summary>Ver lista completa (${nT} estrategias) — click para copiar</summary>
+      <pre class="summary-pre" id="summaryPre"></pre>
+    </details>
+
+    <div class="two-col">
+      <div id="leftCol"></div>
+      <div id="rightCol"></div>
+    </div>
+  `;
+
+  $('#summaryPre').textContent = buildSummaryText(results);
+  $('#leftCol').innerHTML = renderStrategyList();
+  $('#rightCol').innerHTML = renderDetail(results[state.selectedIdx]);
+
+  attachListListeners();
+  attachDetailListeners();
+  renderHeatmap(results[state.selectedIdx]);
+  updateBottomBar();
+
+  $('#dlJson').onclick = () => {
+    const ts = timestamp();
+    downloadFile(buildSummaryJson(results), `wfm_resumen_${ts}.json`, 'application/json');
+  };
+  $('#dlTxt').onclick = () => {
+    const ts = timestamp();
+    downloadFile(buildSummaryText(results), `wfm_resumen_${ts}.txt`, 'text/plain');
+  };
+}
+
+function attachListListeners() {
+  $$('.strat-row').forEach(row => {
+    row.onclick = () => {
+      const idx = +row.dataset.idx;
+      if (idx === state.selectedIdx) return;
+      state.selectedIdx = idx;
+      $('#leftCol').innerHTML = renderStrategyList();
+      $('#rightCol').innerHTML = renderDetail(state.results[idx]);
+      attachListListeners();
+      attachDetailListeners();
+      renderHeatmap(state.results[idx]);
+    };
+  });
+  $$('.fp').forEach(b => {
+    b.onclick = () => {
+      state.filter = b.dataset.flt;
+      $('#leftCol').innerHTML = renderStrategyList();
+      attachListListeners();
+      updateBottomBar();
+    };
+  });
+  const search = $('#searchInput');
+  if (search) {
+    search.oninput = () => {
+      state.search = search.value;
+      const scrollEl = $('.strat-scroll');
+      const scrollTop = scrollEl ? scrollEl.scrollTop : 0;
+      $('#leftCol').innerHTML = renderStrategyList();
+      attachListListeners();
+      const newSearch = $('#searchInput');
+      newSearch.focus();
+      newSearch.setSelectionRange(state.search.length, state.search.length);
+      const newScroll = $('.strat-scroll');
+      if (newScroll) newScroll.scrollTop = scrollTop;
+    };
+  }
+  const sortSel = $('#sortSelect');
+  if (sortSel) {
+    sortSel.onchange = () => {
+      state.sort = sortSel.value;
+      $('#leftCol').innerHTML = renderStrategyList();
+      attachListListeners();
+      updateBottomBar();
+    };
+  }
+}
+
+function attachDetailListeners() {
+  $$('.seg').forEach(b => {
+    b.onclick = () => {
+      if (b.classList.contains('disabled')) return;
+      state.activeMatrix = b.dataset.mx;
+      $('#rightCol').innerHTML = renderDetail(state.results[state.selectedIdx]);
+      attachDetailListeners();
+      renderHeatmap(state.results[state.selectedIdx]);
+      updateBottomBar();
+    };
+  });
+}
+
+function updateBottomBar() {
+  const results = state.results;
+  const nT = results.length;
+  const nOk = results.filter(r => r.status === 'APPROVED').length;
+  const status = nT
+    ? `<span style="color:${C.green};">●</span>&nbsp;${nOk}/${nT} aprobadas`
+    : `<span style="color:${C.muted};">●</span>&nbsp;sin datos`;
+  $('#sb-status').innerHTML = status;
+  $('#sb-filter').textContent = state.filter;
+  $('#sb-sort').textContent = state.sort;
+  const mxLabel = { retdd: 'IS Ret/DD', fitness: 'Fitness OOS', ps: 'Param Stability' }[state.activeMatrix];
+  $('#sb-mx').textContent = mxLabel;
+  $('#sb-fit').textContent = state.thresholds.fitness.toFixed(2);
+  $('#sb-ps').textContent = state.thresholds.ps.toFixed(2);
+  $('#sb-mn').textContent = state.thresholds.minGreen;
+}
+
+function timestamp() {
+  const d = new Date();
+  return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}_${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+function showToast(msg, ms = 3500) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(showToast._h);
+  showToast._h = setTimeout(() => t.classList.remove('show'), ms);
+}
+
+// ════════════════════════════════════════════════════════════
+//  EVENTS
+// ════════════════════════════════════════════════════════════
+
+const upload = $('#upload');
+const fileInput = $('#fileInput');
+
+upload.addEventListener('click', (e) => {
+  if (e.target === fileInput || e.target.classList.contains('x')) return;
+  fileInput.click();
+});
+fileInput.addEventListener('change', (e) => {
+  addFiles([...e.target.files]);
+  fileInput.value = '';
+});
+
+upload.addEventListener('dragover', (e) => { e.preventDefault(); upload.classList.add('drag'); });
+upload.addEventListener('dragleave', () => upload.classList.remove('drag'));
+upload.addEventListener('drop', (e) => {
+  e.preventDefault();
+  upload.classList.remove('drag');
+  addFiles([...e.dataTransfer.files]);
+});
+
+function addFiles(files) {
+  const valid = files.filter(f => f.name.toLowerCase().endsWith('.sqx'));
+  state.files.push(...valid);
+  renderFileChips();
+}
+
+// Threshold panel
+$('#thrToggle').onclick = () => $('#thrPanel').classList.toggle('open');
+['Fit', 'Ps', 'Green'].forEach(k => {
+  const slider = $(`#thr${k}`);
+  const val = $(`#thr${k}Val`);
+  slider.oninput = () => {
+    const v = +slider.value;
+    val.textContent = k === 'Green' ? v : v.toFixed(2);
+    if (k === 'Fit') state.thresholds.fitness = v;
+    if (k === 'Ps') state.thresholds.ps = v;
+    if (k === 'Green') state.thresholds.minGreen = v;
+    updateBottomBar();
+  };
+});
+
+// Analyze
+$('#analyzeBtn').onclick = async () => {
+  if (!state.files.length) {
+    showToast('Sube al menos un archivo .sqx primero.');
+    return;
+  }
+  $('#analyzeBtn').disabled = true;
+  $('#emptyState').style.display = 'none';
+  $('#progressWrap').style.display = '';
+  const total = state.files.length;
+  const raw = [];
+
+  for (let i = 0; i < total; i++) {
+    const f = state.files[i];
+    $('#progressText').textContent = `Analizando ${f.name} (${i + 1}/${total})`;
+    $('#progressBar').style.width = `${((i + 1) / total) * 100}%`;
+    try {
+      const sqx = await parseSqx(f);
+      raw.push(analyzeStrategy(sqx, state.thresholds));
+    } catch (err) {
+      raw.push({
+        strategy_name: f.name.replace(/\.sqx$/i, ''),
+        status: 'ERROR',
+        error: err.message || String(err),
+      });
+    }
+    // yield to browser to repaint progress
+    if (i % 5 === 0) await new Promise(r => setTimeout(r, 0));
+  }
+
+  state.results = rankStrategies(raw);
+  state.selectedIdx = 0;
+  state.activeMatrix = 'retdd';
+  state.filter = 'all';
+  state.search = '';
+  state.files = [];
+  renderFileChips();
+  $('#progressWrap').style.display = 'none';
+  $('#analyzeBtn').disabled = false;
+
+  const nOk = state.results.filter(r => r.status === 'APPROVED').length;
+  showToast(`Análisis completo — ${nOk} aprobadas de ${total}`);
+
+  renderResults();
+};
+
+// Initial render
+renderEmpty();
+updateBottomBar();
+</script>
+
+</body>
+</html>
